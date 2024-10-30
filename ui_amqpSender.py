@@ -1,7 +1,7 @@
-from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect, QSize, Qt)
-from PySide6.QtGui import (QFont, QIcon)
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QCheckBox, QLabel, QLineEdit,
                                QListWidget, QProgressBar, QPushButton, QSizePolicy, QWidget)
+from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect, QSize, Qt)
+from PySide6.QtGui import (QFont, QIcon)
 
 
 class Ui_MainWindow(object):

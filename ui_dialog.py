@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
-
 from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect)
-from PySide6.QtGui import (QFont, QIcon)
 from PySide6.QtWidgets import (QLabel, QLineEdit, QPushButton)
+from PySide6.QtGui import (QFont, QIcon)
 
 
 class Ui_Dialog(object):

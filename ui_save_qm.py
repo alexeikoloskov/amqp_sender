@@ -1,6 +1,6 @@
 from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect)
-from PySide6.QtGui import (QIcon)
 from PySide6.QtWidgets import (QLabel, QLineEdit, QPushButton)
+from PySide6.QtGui import (QIcon)
 
 
 class Ui_Dialog(object):

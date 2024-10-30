@@ -1,13 +1,14 @@
-import json
-import os
-import pika
-from PySide6.QtWidgets import QApplication, QMainWindow, QListWidgetItem,QLineEdit, QMenu, QMessageBox,QDialog
-from PySide6.QtCore import Qt, QPoint
-import sys
-import ui_amqpSender as design
-from cryptography.fernet import Fernet
-from ui_dialog import Ui_Dialog
+from PySide6.QtWidgets import QApplication, QMainWindow, QListWidgetItem,QLineEdit, QMenu, QMessageBox, QDialog
 from ui_save_qm import Ui_Dialog as QM
+from cryptography.fernet import Fernet
+from PySide6.QtCore import Qt, QPoint
+from ui_dialog import Ui_Dialog
+import ui_amqpSender as design
+import pika
+import json
+import sys
+import os
+
 
 SETTINGS_FILE = "settings.enc"
 PRESET_FILE = "preset.json"
