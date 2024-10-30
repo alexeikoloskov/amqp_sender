@@ -70,14 +70,17 @@ def toggleVisibility(ui_dialog):
     finally:
         ui_dialog.show_hide_pass.clearFocus()
 
+
 class SenderApp(QMainWindow, design.Ui_MainWindow):
     def __init__(self):
+        # Это здесь нужно для доступа к переменным, методам
+        # и т.д. в файле design.py
         super().__init__()
 
-        self.setupUi(self)
+        self.setupUi(self)  # Это нужно для инициализации нашего дизайна
 
         self.name_preset = ''
-
+        # Список коннектов
         self.connections = load_settings()
         self.preset = load_preset()
         self.list_connection = ['Create new connection'] + (list(self.connections.keys()) if self.connections else ["There are no connections"])
@@ -91,15 +94,20 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             else:
                 self.list_con.addItem(con)
 
+        # Список пресетов
         self.list_presets = (list(self.preset.keys()) if self.preset else ["There are no presets"])
         for preset in self.list_presets:
             self.list_preset.addItem(preset)
 
-        self.list_con.itemDoubleClicked.connect(lambda x: self.create_new_con() if x.text() == 'Create new connection' else self.choose_host.setText(x.text()))
+        # Заполнение выбранного хоста
+        self.list_con.itemDoubleClicked.connect(lambda x: self.set_choose_host(x))
+        # self.edit_con_button.clicked.connect(self.on_click)
 
+        # Создание и реагирование на меню правой кнопкой мыши в list_con
         self.list_con.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_con.customContextMenuRequested.connect(self.show_context_menu)
 
+        # Создание и реагирование на меню правой кнопкой мыши в list_preset
         self.list_preset.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list_preset.customContextMenuRequested.connect(self.show_context_menu_preset)
 
@@ -109,20 +117,33 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
 
         self.send.clicked.connect(self.send_message)
 
+        # Заполнение пресета
         self.list_preset.itemDoubleClicked.connect(lambda x: self.set_preset(x))
+
+    def set_choose_host(self, host):
+        text = host.text()
+        if text == 'Create new connection':
+            self.create_new_con()
+        elif text == 'There are no connections':
+            pass
+        else:
+            self.choose_host.setText(text)
 
     def checkbox_changed(self, state):
         if state == 2:
             self.count.setReadOnly(False)
+            # print("чекбокс установлен")
         elif state == 0:
             self.count.setReadOnly(True)
+            # print("чекбокс снят")
 
     def set_preset(self, preset_name):
-        preset = self.preset[preset_name.text()]
-        self.choose_host.setText(preset['host'])
-        self.exchange_entry.setText(preset['exchange_entry'])
-        self.rk_entry.setText(preset['routing_key'])
-        self.message_entry.setText(preset['message'])
+        if preset_name.text() != 'There are no presets':
+            preset = self.preset[preset_name.text()]
+            self.choose_host.setText(preset['host'])
+            self.exchange_entry.setText(preset['exchange_entry'])
+            self.rk_entry.setText(preset['routing_key'])
+            self.message_entry.setText(preset['message'])
 
     def save_preset(self):
         self.get_name_preset()
@@ -143,6 +164,9 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         }
         self.list_preset.addItem(self.name_preset)
         save_preset(self.preset)
+
+        if self.list_preset.item(0).text() == 'There are no presets':
+            self.list_preset.takeItem(0)
 
         QMessageBox.information(self, "Save", f"Successfully saved preset - {self.name_preset}")
 
@@ -211,6 +235,9 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             self.list_con.addItem(dialog_ui.con_name.text())
             save_settings(self.connections)
 
+            if self.list_con.item(1).text() == 'There are no connections':
+                self.list_con.takeItem(1)
+
             QMessageBox.information(self, "Save", f"Successfully saved connection - {dialog_ui.con_name.text()}")
             dialog_ui.save.clearFocus()
             dialog.close()
@@ -219,9 +246,14 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         dialog.exec()
 
     def show_context_menu_preset(self, position: QPoint):
+        # Создаем меню
         menu = QMenu()
         delete_action = menu.addAction("Delete")
+
+        # Показываем меню в позиции курсора
         action = menu.exec(self.list_preset.mapToGlobal(position))
+
+        # Обработка выбранного действия
         if action == delete_action:
             self.delete_item_preset()
 
@@ -236,16 +268,20 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             QMessageBox.information(self, "Error", f"Preset {item.text()} is not exist.")
 
     def show_context_menu(self, position: QPoint):
+        # Создаем меню
         menu = QMenu()
 
+        # Добавляем действия в меню
         info_action = menu.addAction("Info")
-        menu.addSeparator()
+        menu.addSeparator()  # Разделитель
         edit_action = menu.addAction("Edit")
-        menu.addSeparator()
+        menu.addSeparator()  # Разделитель
         delete_action = menu.addAction("Delete")
 
+        # Показываем меню в позиции курсора
         action = menu.exec(self.list_con.mapToGlobal(position))
 
+        # Обработка выбранного действия
         if action == edit_action and self.list_con.currentItem().text() != 'Create new connection':
             self.edit_action()
         elif action == delete_action and self.list_con.currentItem().text() != 'Create new connection':
@@ -261,7 +297,7 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             dialog_ui = Ui_Dialog()
             dialog_ui.setupUi(dialog)
             info_item = self.connections[item.text()]
-
+            # Заполняем инфо о хосте
             original_name = item.text()
             dialog_ui.con_name.setText(original_name)
             dialog_ui.hostname.setText(info_item['host'])
@@ -269,7 +305,6 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             dialog_ui.vhost.setText(info_item['vhost'])
             dialog_ui.username.setText(info_item['username'])
             dialog_ui.password.setText(info_item['password'])
-
             dialog_ui.show_hide_pass.clicked.connect(lambda: toggleVisibility(dialog_ui))
 
             def save_connection():
@@ -324,7 +359,7 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             dialog_ui = Ui_Dialog()
             dialog_ui.setupUi(dialog)
             info_item = self.connections[item.text()]
-
+            # Заполняем инфо о хосте
             dialog_ui.con_name.setText(item.text())
             dialog_ui.hostname.setText(info_item['host'])
             dialog_ui.port.setText(str(info_item['port']))

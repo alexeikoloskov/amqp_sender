@@ -1,24 +1,8 @@
-# -*- coding: utf-8 -*-
+from PySide6.QtCore import (QCoreApplication, QMetaObject, QRect, QSize, Qt)
+from PySide6.QtGui import (QFont, QIcon)
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QCheckBox, QLabel, QLineEdit,
+                               QListWidget, QProgressBar, QPushButton, QSizePolicy, QWidget)
 
-################################################################################
-## Form generated from reading UI file 'amqpSender.ui'
-##
-## Created by: Qt User Interface Compiler version 6.8.0
-##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
-################################################################################
-
-from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
-    QMetaObject, QObject, QPoint, QRect,
-    QSize, QTime, QUrl, Qt)
-from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
-    QFont, QFontDatabase, QGradient, QIcon,
-    QImage, QKeySequence, QLinearGradient, QPainter,
-    QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QApplication, QCheckBox,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QProgressBar, QPushButton, QSizePolicy,
-    QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -168,11 +152,9 @@ class Ui_MainWindow(object):
         self.save_preset_button.setIcon(icon)
         MainWindow.setCentralWidget(self.centralwidget)
 
-
         self.retranslateUi(MainWindow)
 
         QMetaObject.connectSlotsByName(MainWindow)
-    # setupUi
 
     def retranslateUi(self, MainWindow):
         MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"AMQP Sender", None))
@@ -186,5 +168,3 @@ class Ui_MainWindow(object):
         self.null_value.setText(QCoreApplication.translate("MainWindow", u"<html><head/><body><p><span style=\" font-weight:700; font-style:italic; text-decoration: underline; color:#ff0000;\">The value can not be empty</span></p></body></html>", None))
         self.error_count.setText(QCoreApplication.translate("MainWindow", u"<html><head/><body><p><span style=\" color:#ff0000;\">must be an integer</span></p></body></html>", None))
         self.label_5.setText(QCoreApplication.translate("MainWindow", u"<html><head/><body><p><span style=\" font-weight:700; font-style:italic;\">Routing key</span></p></body></html>", None))
-    # retranslateUi
-
