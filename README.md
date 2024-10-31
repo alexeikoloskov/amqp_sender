@@ -15,3 +15,7 @@ print(f"Your key: {key}")
 ```
 pyinstaller --onefile --windowed main.py 
 ```
+
+```
+ pyside6-uic amqpSender.ui -o ui_amqpSender.py
+```
