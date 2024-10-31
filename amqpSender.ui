@@ -377,7 +377,7 @@ QProgressBar{
      <rect>
       <x>730</x>
       <y>160</y>
-      <width>281</width>
+      <width>291</width>
       <height>111</height>
      </rect>
     </property>

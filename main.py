@@ -1,19 +1,19 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QListWidgetItem,QLineEdit, QMenu, QMessageBox, QDialog
-from ui_save_qm import Ui_Dialog as QM
-from cryptography.fernet import Fernet
-from PySide6.QtCore import Qt, QPoint
-from ui_dialog import Ui_Dialog
-import ui_amqpSender as design
-import pika
 import json
-import sys
 import os
-
+import pika
+from PySide6.QtWidgets import QApplication, QMainWindow, QListWidgetItem,QLineEdit, QMenu, QMessageBox,QDialog,QTreeWidgetItem, QInputDialog
+from PySide6.QtCore import Qt, QPoint
+from PySide6.QtGui import QAction
+import sys
+import ui_amqpSender as design
+from cryptography.fernet import Fernet
+from ui_dialog import Ui_Dialog
+from ui_save_qm import Ui_Dialog as QM
 
 SETTINGS_FILE = "settings.enc"
 PRESET_FILE = "preset.json"
 
-key = '<insert your key>'
+key = 'VAhS7mFTushSj8ct4_AnwnkaAZGS8691LH4U2kQ5xnI='
 cipher = Fernet(key)
 
 
@@ -84,33 +84,38 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         # Список коннектов
         self.connections = load_settings()
         self.preset = load_preset()
-        self.list_connection = ['Create new connection'] + (list(self.connections.keys()) if self.connections else ["There are no connections"])
-        for con in self.list_connection:
-            if con == 'Create new connection':
-                item = QListWidgetItem(con)
-                font = item.font()
-                font.setBold(True)
-                item.setFont(font)
-                self.list_con.addItem(item)
-            else:
-                self.list_con.addItem(con)
+
+        #self.list_connection =
+        #for con in self.list_connection:
+        #    if con == 'Create new connection':
+        #        item = QListWidgetItem(con)
+        #        font = item.font()
+        #        font.setBold(True)
+        #        item.setFont(font)
+                #self.list_con.addItem(item)
+        #    else:
+                #self.list_con.addItem(con)
 
         # Список пресетов
-        self.list_presets = (list(self.preset.keys()) if self.preset else ["There are no presets"])
-        for preset in self.list_presets:
-            self.list_preset.addItem(preset)
+        #self.list_presets = (list(self.preset.keys()) if self.preset else ["There are no presets"])
+        #for preset in self.list_presets:
+            #elf.list_preset.addItem(preset)
 
         # Заполнение выбранного хоста
-        self.list_con.itemDoubleClicked.connect(lambda x: self.set_choose_host(x))
+        #self.list_con.itemDoubleClicked.connect(lambda x: self.set_choose_host(x))
         # self.edit_con_button.clicked.connect(self.on_click)
 
         # Создание и реагирование на меню правой кнопкой мыши в list_con
-        self.list_con.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.list_con.customContextMenuRequested.connect(self.show_context_menu)
+        #self.list_con.setContextMenuPolicy(Qt.CustomContextMenu)
+        #self.list_con.customContextMenuRequested.connect(self.show_context_menu)
 
         # Создание и реагирование на меню правой кнопкой мыши в list_preset
-        self.list_preset.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.list_preset.customContextMenuRequested.connect(self.show_context_menu_preset)
+        #self.list_preset.setContextMenuPolicy(Qt.CustomContextMenu)
+        #self.list_preset.customContextMenuRequested.connect(self.show_context_menu_preset)
+
+        self.connection_tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.connection_tree.customContextMenuRequested.connect(self.contextMenuEvent)
+
 
         self.save_preset_button.clicked.connect(self.save_preset)
 
@@ -119,7 +124,72 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         self.send.clicked.connect(self.send_message)
 
         # Заполнение пресета
-        self.list_preset.itemDoubleClicked.connect(lambda x: self.set_preset(x))
+        #self.list_preset.itemDoubleClicked.connect(lambda x: self.set_preset(x))
+
+    def contextMenuEvent(self, position: QPoint):
+        # Проверяем, был ли клик на элементе
+        clicked_item = self.connection_tree.itemAt(position)
+        print(clicked_item)
+        if clicked_item:
+            # Контекстное меню для элемента
+            menu = QMenu(self)
+            rename_action = QAction("Rename", self)
+            delete_action = QAction("Delete", self)
+
+            menu.addAction(rename_action)
+            menu.addAction(delete_action)
+
+            # Связываем действия с функциями
+            # rename_action.triggered.connect(lambda: self.rename_item(clicked_item))
+            # delete_action.triggered.connect(lambda: self.delete_item(clicked_item))
+            rename_action.triggered.connect(lambda: print(1))
+            delete_action.triggered.connect(lambda: print(2))
+
+
+        else:
+            # Контекстное меню для пустой области
+            menu = QMenu(self)
+            add_action = QAction("Add Parent Item", self)
+
+            menu.addAction(add_action)
+            add_action.triggered.connect(self.add_item)
+
+        # Отображаем меню в позиции клика
+        menu.exec(self.connection_tree.viewport().mapToGlobal(position))
+
+
+    def add_item(self):
+        text, ok = QInputDialog.getText(self, 'Input Dialog', 'Enter: ')
+        if ok:
+            root = QTreeWidgetItem(self.connection_tree)
+            root.setText(0, text)
+
+    def con_tree(self, data):
+        items = {}
+
+        # Создаем элементы дерева
+        for key, value in data.items():
+            parent_name = value.get("parent")
+
+            # Создаем новый элемент
+            item = QTreeWidgetItem([key])
+
+            # Добавляем дополнительные данные (например, params) в элемент
+            params = value.get("params")
+            if params:
+                item.setToolTip(0, str(params))
+
+            # Если у элемента нет родителя, то это корневой элемент
+            if parent_name is None:
+                self.connection_tree.addTopLevelItem(item)
+            else:
+                # Если есть родитель, добавляем элемент как дочерний к родительскому элементу
+                parent_item = items.get(parent_name)
+                if parent_item:
+                    parent_item.addChild(item)
+
+            # Сохраняем элемент в словарь
+            items[key] = item
 
     def set_choose_host(self, host):
         text = host.text()
