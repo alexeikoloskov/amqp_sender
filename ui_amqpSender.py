@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QHead
     QPushButton, QSizePolicy, QTextEdit, QTreeWidget,
     QTreeWidgetItem, QWidget)
 
+from test import CustomTextEdit
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
@@ -176,7 +177,7 @@ class Ui_MainWindow(object):
         self.label_7 = QLabel(self.centralwidget)
         self.label_7.setObjectName(u"label_7")
         self.label_7.setGeometry(QRect(740, 140, 61, 16))
-        self.message_entry = QTextEdit(self.centralwidget)
+        self.message_entry = CustomTextEdit(self.centralwidget)
         self.message_entry.setObjectName(u"message_entry")
         self.message_entry.setGeometry(QRect(450, 300, 571, 501))
         self.null_value.hide()

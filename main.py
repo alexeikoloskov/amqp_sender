@@ -1,7 +1,7 @@
 import json
 import os
 import pika
-from PySide6.QtWidgets import QApplication, QMainWindow, QHeaderView,QLineEdit, QMenu, QMessageBox,QDialog,QTreeWidgetItem, QInputDialog
+from PySide6.QtWidgets import QApplication, QMainWindow, QLineEdit, QMenu, QMessageBox, QDialog, QTreeWidgetItem
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QAction
 from PySide6.QtGui import QTextCursor, QTextCharFormat, QColor, QFont, QBrush
@@ -13,12 +13,48 @@ from ui_save_qm import Ui_Dialog as QM
 from ui_input_dialog import Ui_Dialog as InputDialog
 import webbrowser
 import copy
+import re
+import importlib.util
+from pathlib import Path
+
 
 SETTINGS_FILE = "settings.enc"
 PRESET_FILE = "preset.json"
+MACROS_FILE = "macros.json"
+macros = {}
 
-key = '***'
+
+
+macro_pattern = re.compile(r'\$(\w+)\$')
+
+key = 'VAhS7mFTushSj8ct4_AnwnkaAZGS8691LH4U2kQ5xnI='
 cipher = Fernet(key)
+
+
+def load_plugin(plugin_name):
+    plugin_path = os.path.join('plugins', f'{plugin_name}.py')
+    if os.path.exists(plugin_path):
+        spec = importlib.util.spec_from_file_location(plugin_name, plugin_path)
+        plugin_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(plugin_module)
+        macros[plugin_name] = plugin_module
+        print(1)
+
+
+def process_macros_in_string(text):
+    # Пример макросов в тексте
+    for macro_name in macros:
+        if f"${macro_name}$" in text:
+            result = macros[macro_name].process_macro(text)
+            text = text.replace(f"${macro_name}$", result)
+    return text
+
+
+def loading_plugins():
+    path = Path("plugins")
+    for file in path.rglob("*.py"):
+        load_plugin(file.stem)
+    print(macros)
 
 
 def get_depth(node, data, cache={}):
@@ -68,6 +104,14 @@ def load_preset():
     if not os.path.exists(PRESET_FILE):
         return {}
     with open(PRESET_FILE, "rb") as f:
+        data = f.read()
+    return json.loads(data)
+
+
+def load_macros():
+    if not os.path.exists(MACROS_FILE):
+        return {}
+    with open(MACROS_FILE, "rb") as f:
         data = f.read()
     return json.loads(data)
 
@@ -126,11 +170,41 @@ def find_children(data, element):
     return children
 
 
+def process_macros_in_string(macros, text):
+    def replace_macro(match):
+        macro_name = match.group(1)
+        if macro_name in macros:
+            print(macro_name)
+            print(macros[macro_name])
+            try:
+                # Выполняем код макроса и возвращаем результат
+                return str(eval(macros[macro_name], {"builtins": {}}))  # Защита с пустыми builtins
+            except Exception as e:
+                print(f"Ошибка выполнения макроса '{macro_name}': {e}")
+        return match.group(0)  # Возвращаем исходный текст, если макрос не найден
+
+    return macro_pattern.sub(replace_macro, text)
+
+
+# Рекурсивная функция для поиска и обработки макросов в JSON-данных
+def process_macros(macros, data):
+    if isinstance(data, dict):
+        return {key: process_macros(macros, value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [process_macros(macros, item) for item in data]
+    elif isinstance(data, str):
+        # Обрабатываем строку, заменяя макросы
+        return process_macros_in_string(macros, data)
+    return data
+
+
 class SenderApp(QMainWindow, design.Ui_MainWindow):
     def __init__(self):
         # Это здесь нужно для доступа к переменным, методам
         # и т.д. в файле design.py
         super().__init__()
+
+        loading_plugins()
 
         self.font_tree = QFont()
         self.font_tree.setBold(True)
@@ -208,10 +282,14 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         if clicked_item:
             # Контекстное меню для элемента
             menu = QMenu(self)
+            info_action = QAction("Show Info", self)
             add_child_action = QAction("Add chapter", self)
             add_connection_action = QAction("Add connect", self)
             rename_action = QAction("Rename", self)
             delete_action = QAction("Delete", self)
+
+            menu.addAction(info_action)
+            info_action.triggered.connect(lambda: self.show_info_connect(clicked_item))
 
             if clicked_item.text(1) == "+":
                 edit_action = QAction("Edit connect", self)
@@ -480,6 +558,29 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             dialog_ui.save.clicked.connect(save_connection)
             dialog.exec()
 
+    def show_info_connect(self, clicked_item):
+        if clicked_item.text(1) == '+':
+            dialog = QDialog(self)
+            dialog.setWindowTitle('INFO')
+            dialog_ui = Ui_Dialog()
+            dialog_ui.setupUi(dialog)
+            info_item = self.connections[clicked_item.text(0)]['params']
+            # Заполняем инфо о хосте
+            dialog_ui.con_name.setText(clicked_item.text(0))
+            dialog_ui.hostname.setText(info_item['host'])
+            dialog_ui.port.setText(str(info_item['port']))
+            dialog_ui.vhost.setText(info_item['vhost'])
+            dialog_ui.username.setText(info_item['username'])
+            dialog_ui.password.setText(info_item['password'])
+
+            dialog_ui.show_hide_pass.clicked.connect(lambda: toggleVisibility(dialog_ui))
+
+            for item in [dialog_ui.con_name, dialog_ui.hostname, dialog_ui.port,
+                         dialog_ui.vhost, dialog_ui.username, dialog_ui.password]:
+                item.setReadOnly(True)
+
+            dialog_ui.save.setDisabled(True)
+            dialog.exec()
 
     def contextMenuEventPreset(self, position: QPoint):
         # Проверяем, был ли клик на элементе
@@ -688,31 +789,6 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             self.count.setReadOnly(True)
             # print("чекбокс снят")
 
-    # def show_info(self):
-    #     item = self.list_con.currentItem()
-    #     if item:
-    #         dialog = QDialog(self)
-    #         dialog.setWindowTitle('INFO')
-    #         dialog_ui = Ui_Dialog()
-    #         dialog_ui.setupUi(dialog)
-    #         info_item = self.connections[item.text()]
-    #         # Заполняем инфо о хосте
-    #         dialog_ui.con_name.setText(item.text())
-    #         dialog_ui.hostname.setText(info_item['host'])
-    #         dialog_ui.port.setText(str(info_item['port']))
-    #         dialog_ui.vhost.setText(info_item['vhost'])
-    #         dialog_ui.username.setText(info_item['username'])
-    #         dialog_ui.password.setText(info_item['password'])
-    #
-    #         dialog_ui.show_hide_pass.clicked.connect(lambda: toggleVisibility(dialog_ui))
-    #
-    #         for item in [dialog_ui.con_name, dialog_ui.hostname, dialog_ui.port,
-    #                      dialog_ui.vhost, dialog_ui.username, dialog_ui.password]:
-    #             item.setReadOnly(True)
-    #
-    #         dialog_ui.save.setDisabled(True)
-    #         dialog.exec()
-
     def validate_json(self, text, entry):
         # Сбрасываем форматирование перед проверкой
         self.reset_formatting(entry)
@@ -757,59 +833,69 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         if not self.validate_json(message, self.message_entry):
             return
 
-        headers = self.headers_entry.toPlainText()
-        if not self.validate_json(headers, self.headers_entry):
-            return
+        json_message = json.loads(message)
 
-        props = self.props_entry.toPlainText()
-        if not self.validate_json(props, self.props_entry):
-            return
+        for key, value in json_message.items():
+            for macro_name in macros:
+                if f"${macro_name}$" in value:
+                    result = macros[macro_name].process_macro(value)
+                    json_message[key] = value.replace(f"${macro_name}$", str(result))
 
-        exchange_name = self.exchange_entry.text()
-        rk = self.rk_entry.text()
-        conn_params = self.connections[self.choose_host.text()]
+        print(json_message)
 
-        for item in [self.choose_host, self.exchange_entry, self.message_entry]:
-            if check_null_value(item.text()):
-                self.null_value.show()
-                self.send.clearFocus()
-                return
-        if self.null_value.isVisible():
-            self.null_value.hide()
-
-        if not check_int(self.count.text()):
-            self.error_count.show()
-            self.send.clearFocus()
-            return
-        if self.error_count.isVisible():
-            self.error_count.hide()
-
-        self.progressBar.setMaximum(int(self.count.text()))
-
-        try:
-            connection = pika.BlockingConnection(pika.ConnectionParameters(
-                host=conn_params['host'],
-                port=conn_params['port'],
-                credentials=pika.PlainCredentials(conn_params['username'], conn_params['password'])
-            ))
-            channel = connection.channel()
-
-            for _ in range(int(self.count.text())):
-                channel.basic_publish(exchange=exchange_name,
-                                      routing_key=rk,
-                                      body=message)
-
-                value = self.progressBar.value()
-                if value < self.progressBar.maximum():
-                    self.progressBar.setValue(value + 1)
-                else:
-                    break
-            connection.close()
-            QMessageBox.information(self, "Success", f"Successfully send {self.count.text()} message.")
-            self.send.clearFocus()
-        except Exception as e:
-            self.send.clearFocus()
-            QMessageBox.critical(self, "Critical", f"The message could not be sent {e}")
+        # headers = self.headers_entry.toPlainText()
+        # if not self.validate_json(headers, self.headers_entry):
+        #     return
+        #
+        # props = self.props_entry.toPlainText()
+        # if not self.validate_json(props, self.props_entry):
+        #     return
+        #
+        # exchange_name = self.exchange_entry.text()
+        # rk = self.rk_entry.text()
+        # conn_params = self.connections[self.choose_host.text()]
+        #
+        # for item in [self.choose_host, self.exchange_entry, self.message_entry]:
+        #     if check_null_value(item.text()):
+        #         self.null_value.show()
+        #         self.send.clearFocus()
+        #         return
+        # if self.null_value.isVisible():
+        #     self.null_value.hide()
+        #
+        # if not check_int(self.count.text()):
+        #     self.error_count.show()
+        #     self.send.clearFocus()
+        #     return
+        # if self.error_count.isVisible():
+        #     self.error_count.hide()
+        #
+        # self.progressBar.setMaximum(int(self.count.text()))
+        #
+        # try:
+        #     connection = pika.BlockingConnection(pika.ConnectionParameters(
+        #         host=conn_params['host'],
+        #         port=conn_params['port'],
+        #         credentials=pika.PlainCredentials(conn_params['username'], conn_params['password'])
+        #     ))
+        #     channel = connection.channel()
+        #
+        #     for _ in range(int(self.count.text())):
+        #         channel.basic_publish(exchange=exchange_name,
+        #                               routing_key=rk,
+        #                               body=message)
+        #
+        #         value = self.progressBar.value()
+        #         if value < self.progressBar.maximum():
+        #             self.progressBar.setValue(value + 1)
+        #         else:
+        #             break
+        #     connection.close()
+        #     QMessageBox.information(self, "Success", f"Successfully send {self.count.text()} message.")
+        #     self.send.clearFocus()
+        # except Exception as e:
+        #     self.send.clearFocus()
+        #     QMessageBox.critical(self, "Critical", f"The message could not be sent {e}")
 
 
 def main():
