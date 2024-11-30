@@ -1,5 +1,7 @@
 import json
 import os
+import uuid
+
 import pika
 from PySide6.QtWidgets import QApplication, QMainWindow, QLineEdit, QMenu, QMessageBox, QDialog, QTreeWidgetItem
 from PySide6.QtCore import Qt, QPoint
@@ -14,47 +16,52 @@ from ui_input_dialog import Ui_Dialog as InputDialog
 import webbrowser
 import copy
 import re
-import importlib.util
-from pathlib import Path
+import random
+import string
+from datetime import date, datetime
+import webbrowser
 
 
 SETTINGS_FILE = "settings.enc"
 PRESET_FILE = "preset.json"
-MACROS_FILE = "macros.json"
-macros = {}
 
-
-
-macro_pattern = re.compile(r'\$(\w+)\$')
-
-key = 'VAhS7mFTushSj8ct4_AnwnkaAZGS8691LH4U2kQ5xnI='
+key = '***'
 cipher = Fernet(key)
 
+git_use = False
+pattern = r"\$INT-(\d+)\$"
 
-def load_plugin(plugin_name):
-    plugin_path = os.path.join('plugins', f'{plugin_name}.py')
-    if os.path.exists(plugin_path):
-        spec = importlib.util.spec_from_file_location(plugin_name, plugin_path)
-        plugin_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(plugin_module)
-        macros[plugin_name] = plugin_module
-        print(1)
+def replace_match(match):
+    x = match.group(1)  # Получаем значение X из шаблона
+    result = generate_random_int(lenght=int(x))  # Вызываем функцию с этим значением
+    return str(result)  # Возвращаем результат в виде строки
 
 
-def process_macros_in_string(text):
-    # Пример макросов в тексте
-    for macro_name in macros:
-        if f"${macro_name}$" in text:
-            result = macros[macro_name].process_macro(text)
-            text = text.replace(f"${macro_name}$", result)
-    return text
+def generate_random_string():
+    """
+    Генерирует случайную строку случайной длины (от 10 до 30 символов).
+
+    :return: Случайная строка
+    """
+    length = random.randint(10, 30)
+    characters = string.ascii_letters + string.digits
+    random_string = ''.join(random.choices(characters, k=length))
+    return random_string
 
 
-def loading_plugins():
-    path = Path("plugins")
-    for file in path.rglob("*.py"):
-        load_plugin(file.stem)
-    print(macros)
+def generate_random_int(lenght=9, msisdn=False):
+    """
+        Генерирует случайное число определённой длины.
+
+        :return: Случайное число
+        """
+    range_start = 10 ** (lenght - 1)
+    range_end = (10 ** lenght) - 1
+    if msisdn:
+        return '9'+str(random.randint(range_start, range_end))
+    else:
+
+        return random.randint(range_start, range_end)
 
 
 def get_depth(node, data, cache={}):
@@ -106,15 +113,6 @@ def load_preset():
     with open(PRESET_FILE, "rb") as f:
         data = f.read()
     return json.loads(data)
-
-
-def load_macros():
-    if not os.path.exists(MACROS_FILE):
-        return {}
-    with open(MACROS_FILE, "rb") as f:
-        data = f.read()
-    return json.loads(data)
-
 
 def check_int(text) -> bool:
     try:
@@ -170,41 +168,11 @@ def find_children(data, element):
     return children
 
 
-def process_macros_in_string(macros, text):
-    def replace_macro(match):
-        macro_name = match.group(1)
-        if macro_name in macros:
-            print(macro_name)
-            print(macros[macro_name])
-            try:
-                # Выполняем код макроса и возвращаем результат
-                return str(eval(macros[macro_name], {"builtins": {}}))  # Защита с пустыми builtins
-            except Exception as e:
-                print(f"Ошибка выполнения макроса '{macro_name}': {e}")
-        return match.group(0)  # Возвращаем исходный текст, если макрос не найден
-
-    return macro_pattern.sub(replace_macro, text)
-
-
-# Рекурсивная функция для поиска и обработки макросов в JSON-данных
-def process_macros(macros, data):
-    if isinstance(data, dict):
-        return {key: process_macros(macros, value) for key, value in data.items()}
-    elif isinstance(data, list):
-        return [process_macros(macros, item) for item in data]
-    elif isinstance(data, str):
-        # Обрабатываем строку, заменяя макросы
-        return process_macros_in_string(macros, data)
-    return data
-
-
 class SenderApp(QMainWindow, design.Ui_MainWindow):
     def __init__(self):
         # Это здесь нужно для доступа к переменным, методам
         # и т.д. в файле design.py
         super().__init__()
-
-        loading_plugins()
 
         self.font_tree = QFont()
         self.font_tree.setBold(True)
@@ -222,7 +190,8 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
 
         self.connection_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.connection_tree.customContextMenuRequested.connect(self.contextMenuEventConnection)
-        self.connection_tree.itemDoubleClicked.connect(self.set_choose_host)
+        self.connection_tree.itemDoubleClicked.connect(self.open_ui)
+        self.connection_tree.itemClicked.connect(self.set_choose_host)
 
         self.preset_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.preset_tree.customContextMenuRequested.connect(self.contextMenuEventPreset)
@@ -274,8 +243,6 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             items[key] = item
         tree.expandAll()
 
-
-
     def contextMenuEventConnection(self, position: QPoint):
         # Проверяем, был ли клик на элементе
         clicked_item = self.connection_tree.itemAt(position)
@@ -315,18 +282,19 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             add_connection_action = QAction("Add connect", self)
             menu.addAction(add_action)
             menu.addAction(add_connection_action)
-
-            menu.addSeparator()
-
-            import_action = QAction("Import list connections", self)
-            menu.addAction(import_action)
-            export_action = QAction("Export list connections", self)
-            menu.addAction(export_action)
-
             add_action.triggered.connect(lambda: self.add_chapter_connection(clicked_item))
             add_connection_action.triggered.connect(lambda: self.create_new_con(clicked_item))
-            import_action.triggered.connect(lambda: print("import"))
-            export_action.triggered.connect(lambda: print("export"))
+
+            if git_use:
+                menu.addSeparator()
+
+                import_action = QAction("Import list connections", self)
+                menu.addAction(import_action)
+                export_action = QAction("Export list connections", self)
+                menu.addAction(export_action)
+
+                import_action.triggered.connect(lambda: print("import"))
+                export_action.triggered.connect(lambda: print("export"))
 
         # Отображаем меню в позиции клика
         menu.exec(self.connection_tree.viewport().mapToGlobal(position))
@@ -614,17 +582,19 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             add_preset_action = QAction("Add preset", self)
             menu.addAction(add_action)
             menu.addAction(add_preset_action)
-            menu.addSeparator()
-
-            import_action = QAction("Import list connections", self)
-            menu.addAction(import_action)
-            export_action = QAction("Export list connections", self)
-            menu.addAction(export_action)
-
             add_action.triggered.connect(lambda: self.add_chapter_preset(clicked_item))
             add_preset_action.triggered.connect(lambda: self.save_preset_item(clicked_item))
-            import_action.triggered.connect(lambda: print("import"))
-            export_action.triggered.connect(lambda: print("export"))
+
+            if git_use:
+                menu.addSeparator()
+
+                import_action = QAction("Import list connections", self)
+                menu.addAction(import_action)
+                export_action = QAction("Export list connections", self)
+                menu.addAction(export_action)
+
+                import_action.triggered.connect(lambda: print("import"))
+                export_action.triggered.connect(lambda: print("export"))
 
         # Отображаем меню в позиции клика
         menu.exec(self.preset_tree.viewport().mapToGlobal(position))
@@ -668,6 +638,7 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
 
                 if dialog_ui.lineEdit_2.text():
                     self.preset[dialog_ui.lineEdit.text()]['url'] = dialog_ui.lineEdit_2.text()
+                    new_item.setText(2, dialog_ui.lineEdit_2.text())
                     new_item.setData(2, Qt.UserRole, dialog_ui.lineEdit_2.text())
                 clicked_item.addChild(new_item) if clicked_item else self.preset_tree.addTopLevelItem(new_item)
                 save_preset(self.preset)
@@ -733,33 +704,6 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
                     new_item.setText(2, dialog_ui.lineEdit_2.text())
                     new_item.setData(2, Qt.UserRole, dialog_ui.lineEdit_2.text())
                 clicked_item.addChild(new_item) if clicked_item else self.preset_tree.addTopLevelItem(new_item)
-                # else:
-                #     new_item = QTreeWidgetItem(self.preset_tree)
-                #     new_item.setText(0, preset_name)
-                #     new_item.setText(1, "+")
-                #     self.preset[preset_name] = {
-                #         "parent": None,
-                #         "params": {
-                #             'host': self.choose_host.text(),
-                #             'exchange_entry': self.exchange_entry.text(),
-                #             'routing_key': self.rk_entry.text(),
-                #             'message': self.message_entry.toPlainText(),
-                #             'headers': self.headers_entry.toPlainText(),
-                #             'props': self.props_entry.toPlainText()
-                #         }
-                #     }
-                #     params = self.preset[preset_name].get("params")
-                #     if params:
-                #         params['message'] = "***"
-                #         new_item.setToolTip(0, str(params))
-                #         new_item.setFont(0, self.font_tree)
-                #     if dialog_ui.lineEdit_2.text():
-                #         self.preset[dialog_ui.lineEdit.text()]['params'] = {
-                #             "url": dialog_ui.lineEdit_2.text()
-                #         }
-                #         new_item.setText(2, dialog_ui.lineEdit_2.text())
-                #         new_item.setData(2, Qt.UserRole, dialog_ui.lineEdit_2.text())
-                #     self.preset_tree.addTopLevelItem(new_item)
                 save_preset(self.preset)
                 dialog.close()
             dialog_ui.save.clicked.connect(save)
@@ -827,76 +771,36 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         absolute_position = sum(len(lines[i]) + 1 for i in range(line - 1)) + (column - 1)
         return absolute_position
 
-    def send_message(self):
+    def open_ui(self, item):
+        if item.text(1) == '+':
+            print(self.connections[item.text(0)]["params"]["host"])
+            webbrowser.open(f'http://{self.connections[item.text(0)]["params"]["host"]}:15672')
 
+    def send_message(self):
         message = self.message_entry.toPlainText()
+
+        message = message.replace('$UUID$', str(uuid.uuid4()))
+        message = message.replace('$STR$', str(generate_random_string()))
+        message = message.replace('$MSISDN$', str(generate_random_int(msisdn=True)))
+        message = message.replace('$DATE$', str(date.today()))
+        message = message.replace('$DATE_TIME$', str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
+        message = re.sub(pattern, replace_match, message)
+
+        print(message)
+
         if not self.validate_json(message, self.message_entry):
             return
 
         json_message = json.loads(message)
 
-        for key, value in json_message.items():
-            for macro_name in macros:
-                if f"${macro_name}$" in value:
-                    result = macros[macro_name].process_macro(value)
-                    json_message[key] = value.replace(f"${macro_name}$", str(result))
+        # for key, value in json_message.items():
+        #     for macro_name in macros:
+        #         if f"${macro_name}$" in value:
+        #             result = macros[macro_name].process_macro(value)
+        #             json_message[key] = value.replace(f"${macro_name}$", str(result))
 
         print(json_message)
-
-        # headers = self.headers_entry.toPlainText()
-        # if not self.validate_json(headers, self.headers_entry):
-        #     return
-        #
-        # props = self.props_entry.toPlainText()
-        # if not self.validate_json(props, self.props_entry):
-        #     return
-        #
-        # exchange_name = self.exchange_entry.text()
-        # rk = self.rk_entry.text()
-        # conn_params = self.connections[self.choose_host.text()]
-        #
-        # for item in [self.choose_host, self.exchange_entry, self.message_entry]:
-        #     if check_null_value(item.text()):
-        #         self.null_value.show()
-        #         self.send.clearFocus()
-        #         return
-        # if self.null_value.isVisible():
-        #     self.null_value.hide()
-        #
-        # if not check_int(self.count.text()):
-        #     self.error_count.show()
-        #     self.send.clearFocus()
-        #     return
-        # if self.error_count.isVisible():
-        #     self.error_count.hide()
-        #
-        # self.progressBar.setMaximum(int(self.count.text()))
-        #
-        # try:
-        #     connection = pika.BlockingConnection(pika.ConnectionParameters(
-        #         host=conn_params['host'],
-        #         port=conn_params['port'],
-        #         credentials=pika.PlainCredentials(conn_params['username'], conn_params['password'])
-        #     ))
-        #     channel = connection.channel()
-        #
-        #     for _ in range(int(self.count.text())):
-        #         channel.basic_publish(exchange=exchange_name,
-        #                               routing_key=rk,
-        #                               body=message)
-        #
-        #         value = self.progressBar.value()
-        #         if value < self.progressBar.maximum():
-        #             self.progressBar.setValue(value + 1)
-        #         else:
-        #             break
-        #     connection.close()
-        #     QMessageBox.information(self, "Success", f"Successfully send {self.count.text()} message.")
-        #     self.send.clearFocus()
-        # except Exception as e:
-        #     self.send.clearFocus()
-        #     QMessageBox.critical(self, "Critical", f"The message could not be sent {e}")
-
 
 def main():
     app = QApplication(sys.argv)
