@@ -19,3 +19,9 @@ pyinstaller --onefile --windowed main.py
 ```
  pyside6-uic amqpSender.ui -o ui_amqpSender.py
 ```
+
+
+
+```
+python PyInstaller --onefile --icon=amqp_sender_icon.ico --add-data "amqp_sender_icon.ico;." --name "AMQPSender" --splash "splash.png" --windowed main.py
+```
