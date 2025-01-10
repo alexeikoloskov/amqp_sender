@@ -18,7 +18,74 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QHeaderView,
     QLabel, QLineEdit, QMainWindow, QProgressBar,
     QPushButton, QSizePolicy, QTextEdit, QTreeWidget,
-    QTreeWidgetItem, QWidget)
+    QTreeWidgetItem, QWidget, QTextBrowser, QVBoxLayout, QWidget)
+
+class HelpWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Справка")
+
+        # Создаем QTextBrowser для отображения справочного текста
+        self.text_browser = QTextBrowser()
+        self.text_browser.setHtml("""
+            <table border="1">
+                <thead>
+                    <tr>
+                    <th>Макрос</th>
+                    <th>Результат</th>
+                    <th>Пример</th>             
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                    <td>$UUID$</td>
+                    <td>uuid4</td>
+                    <td>29f13cd1-dc2d-4215-94ba-4c88fcbd9921</td>
+                    </tr>
+                    <tr>
+                    <td>$STR$</td>
+                    <td>случайный набор букв и символов длиной 10</td>
+                    <td>asdfF H+hU</td>
+                    </tr>
+                    <tr>
+                    <td>$MSISDN$</td>
+                    <td>случайный номер телефона (диапазон 9000000000 - 9999999999)</td>
+                    <td>9123456789</td>
+                    </tr>
+                    <tr>
+                    <td>$DATE$</td>
+                    <td>Текущая дата</td>
+                    <td>2024-12-03</td>
+                    </tr>
+                    <tr>
+                    <td>$DATE_TIME$</td>
+                    <td>Текущая дата и время</td>
+                    <td>2024-12-03 14:30:14</td>
+                    </tr>
+                    <tr>
+                    <td>$ISO_UTC$</td>
+                    <td>Дата и время в формате ISO8601 UTC</td>
+                    <td>2024-12-03T11:32:44.912081+00:00</td>
+                    </tr>
+                    <tr>
+                    <td>$ISO$</td>
+                    <td>Дата и время в формате ISO8601 Europe/Moscow</td>
+                    <td>2024-12-03T14:32:44.914084+03:00</td>
+                    </tr>
+                    <tr>
+                    <td>$INT-XX$</td>
+                    <td>натуральное число длинной ХХ</td>
+                    <td>12345</td>
+                    </tr>
+                </tbody>
+                </table>
+        """)
+
+        # Добавляем текстовый браузер в компоновку
+        layout = QVBoxLayout()
+        layout.addWidget(self.text_browser)
+        self.setLayout(layout)
+        self.setFixedSize(702, 220)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -112,6 +179,8 @@ class Ui_MainWindow(object):
         self.count.setGeometry(QRect(740, 40, 151, 31))
         self.count.setAutoFillBackground(False)
         self.count.setReadOnly(False)
+        self.count.setText("1")
+        self.count.setReadOnly(True)
         self.send = QPushButton(self.centralwidget)
         self.send.setObjectName(u"send")
         self.send.setGeometry(QRect(850, 810, 171, 31))
@@ -181,6 +250,8 @@ class Ui_MainWindow(object):
         self.message_entry.setGeometry(QRect(450, 300, 571, 501))
         self.null_value.hide()
         self.error_count.hide()
+        self.menu = self.menuBar().addMenu("Макросы")
+
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
@@ -189,7 +260,7 @@ class Ui_MainWindow(object):
     # setupUi
 
     def retranslateUi(self, MainWindow):
-        MainWindow.setWindowTitle(QCoreApplication.translate("MainWindow", u"MainWindow", None))
+        MainWindow.setWindowTitle(QCoreApplication.translate("AMQP Sender", u"AMQP Sender", None))
         self.label.setText(QCoreApplication.translate("MainWindow", u"<html><head/><body><p><span style=\" font-weight:700; font-style:italic;\">Exchange name</span></p></body></html>", None))
         self.label_2.setText(QCoreApplication.translate("MainWindow", u"<html><head/><body><p><span style=\" font-weight:700; font-style:italic;\">Message</span></p></body></html>", None))
         self.label_3.setText(QCoreApplication.translate("MainWindow", u"<html><head/><body><p><span style=\" font-weight:700; font-style:italic;\">Choose host</span></p></body></html>", None))

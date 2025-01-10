@@ -5,7 +5,7 @@ import uuid
 import pika
 from PySide6.QtWidgets import QApplication, QMainWindow, QLineEdit, QMenu, QMessageBox, QDialog, QTreeWidgetItem
 from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon
 from PySide6.QtGui import QTextCursor, QTextCharFormat, QColor, QFont, QBrush
 import sys
 import ui_amqpSender as design
@@ -18,18 +18,29 @@ import copy
 import re
 import random
 import string
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 import webbrowser
+import traceback
+import importlib
 
+import ctypes
+myappid = 'akoloskov.amqpsender.1'
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+basedir = os.path.dirname(__file__)
 
 SETTINGS_FILE = "settings.enc"
-PRESET_FILE = "preset.json"
-
-key = '***'
+key = ''
 cipher = Fernet(key)
 
+
+PRESET_FILE = "preset.json"
+
 git_use = False
+
 pattern = r"\$INT-(\d+)\$"
+
 
 def replace_match(match):
     x = match.group(1)  # Получаем значение X из шаблона
@@ -37,32 +48,18 @@ def replace_match(match):
     return str(result)  # Возвращаем результат в виде строки
 
 
-def generate_random_string():
-    """
-    Генерирует случайную строку случайной длины (от 10 до 30 символов).
+def generate_random_string(length=10):
+    return ''.join(random.choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _+-", k=length))
 
-    :return: Случайная строка
-    """
-    length = random.randint(10, 30)
-    characters = string.ascii_letters + string.digits
-    random_string = ''.join(random.choices(characters, k=length))
-    return random_string
+def generate_random_int(lenght=9,msisdn=False):
+    return random.randint(9000000000, 9999999999) if msisdn else random.randint(10 ** (lenght - 1), (10 ** lenght) - 1)
 
-
-def generate_random_int(lenght=9, msisdn=False):
-    """
-        Генерирует случайное число определённой длины.
-
-        :return: Случайное число
-        """
-    range_start = 10 ** (lenght - 1)
-    range_end = (10 ** lenght) - 1
-    if msisdn:
-        return '9'+str(random.randint(range_start, range_end))
+def get_iso_datetime(utc=False):
+    if utc:
+        now_iso = datetime.now(ZoneInfo("UTC"))
     else:
-
-        return random.randint(range_start, range_end)
-
+        now_iso = datetime.now(ZoneInfo("Europe/Moscow"))
+    return now_iso.isoformat()
 
 def get_depth(node, data, cache={}):
     if node in cache:
@@ -97,6 +94,18 @@ def load_settings():
     return json.loads(decrypted_data)
 
 
+def toggleVisibility(ui_dialog):
+    try:
+        if ui_dialog.password.echoMode() == QLineEdit.Normal:
+            ui_dialog.password.setEchoMode(QLineEdit.Password)
+            ui_dialog.show_hide_pass.setText('Show')
+        else:
+            ui_dialog.password.setEchoMode(QLineEdit.Normal)
+            ui_dialog.show_hide_pass.setText('Hide')
+    finally:
+        ui_dialog.show_hide_pass.clearFocus()
+
+
 def save_preset(preset):
     depths = {node: get_depth(node, preset) for node in preset}
 
@@ -114,6 +123,7 @@ def load_preset():
         data = f.read()
     return json.loads(data)
 
+
 def check_int(text) -> bool:
     try:
         _ = int(text)
@@ -127,18 +137,6 @@ def check_null_value(text) -> bool:
         return True
     else:
         return False
-
-
-def toggleVisibility(ui_dialog):
-    try:
-        if ui_dialog.password.echoMode() == QLineEdit.Normal:
-            ui_dialog.password.setEchoMode(QLineEdit.Password)
-            ui_dialog.show_hide_pass.setText('Show')
-        else:
-            ui_dialog.password.setEchoMode(QLineEdit.Normal)
-            ui_dialog.show_hide_pass.setText('Hide')
-    finally:
-        ui_dialog.show_hide_pass.clearFocus()
 
 
 def search_tree(widget, text):
@@ -159,13 +157,19 @@ def search_tree(widget, text):
     return False
 
 
-def find_children(data, element):
-    children = set()
+def find_children(data, element, children = set()):
     for key, value in data.items():
         if value['parent'] == element:
             children.add(key)
             find_children(data, key)
     return children
+
+def create_client_props():
+    client_props = {
+        'product': 'AMQP Semder',
+        'information': 'Sender AMQP message manual'
+    }
+    return client_props
 
 
 class SenderApp(QMainWindow, design.Ui_MainWindow):
@@ -173,6 +177,8 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         # Это здесь нужно для доступа к переменным, методам
         # и т.д. в файле design.py
         super().__init__()
+
+        self.json_valid = []
 
         self.font_tree = QFont()
         self.font_tree.setBold(True)
@@ -200,6 +206,17 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         self.count_yn.stateChanged.connect(self.checkbox_changed)
 
         self.send.clicked.connect(self.send_message)
+
+        # Создаем главное меню
+        help_action = QAction("Справка", self)
+        help_action.triggered.connect(self.show_help)
+
+        self.menu.addAction(help_action)
+
+    def show_help(self):
+        # Создаем и показываем окно справки
+        self.help_window = design.HelpWindow()
+        self.help_window.show()
 
     def load_tree(self, data, tree):
         # Словарь для хранения ссылок на элементы по их именам
@@ -465,10 +482,6 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         dialog_ui.save.clicked.connect(save)
         dialog.exec()
 
-    def set_choose_host(self, item, column):
-        if item.text(1) == '+':
-            self.choose_host.setText(item.text(0))
-
     def edit_connect(self, clicked_item):
         if clicked_item:
             dialog = QDialog(self)
@@ -550,6 +563,12 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             dialog_ui.save.setDisabled(True)
             dialog.exec()
 
+    def set_choose_host(self, item, column):
+        if item.text(1) == '+':
+            self.choose_host.setText(item.text(0))
+###
+###        Preset 
+###
     def contextMenuEventPreset(self, position: QPoint):
         # Проверяем, был ли клик на элементе
         clicked_item = self.preset_tree.itemAt(position)
@@ -571,8 +590,8 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             # Связываем действия с функциями
             # rename_action.triggered.connect(lambda: self.rename_item(clicked_item))
             add_preset_action.triggered.connect(lambda: self.save_preset_item(clicked_item))
-            delete_action.triggered.connect(lambda: print("delete"))
-            rename_action.triggered.connect(lambda: print("rename"))
+            delete_action.triggered.connect(lambda: self.delete_item_preset(clicked_item))
+            rename_action.triggered.connect(lambda: self.rename_preset(clicked_item))
             add_child_action.triggered.connect(lambda: self.add_chapter_preset(clicked_item))
 
         else:
@@ -613,7 +632,7 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
                 if dialog_ui.null_value.isVisible():
                     dialog_ui.null_value.hide()
                 if search_tree(self.preset_tree, dialog_ui.lineEdit.text()):
-                    QMessageBox.warning(self, "Error", "This name is already in the connection tree.")
+                    QMessageBox.warning(self, "Error", "This name is already in the preset tree.")
                     dialog_ui.save.clearFocus()
                     return
 
@@ -664,7 +683,7 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
                     QMessageBox.warning(self, "Error", "A preset with this name already exists.")
                     dialog_ui.save.clearFocus()
                     return
-                for item in [self.choose_host, self.exchange_entry, self.rk_entry]:
+                for item in [self.exchange_entry, self.rk_entry]:
                     if check_null_value(item.text()):
                         self.null_value.show()
                         dialog_ui.save.clearFocus()
@@ -685,7 +704,6 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
                 self.preset[preset_name] = {
                     'parent': clicked_item.text(0) if clicked_item else None,
                     'params': {
-                        'host': self.choose_host.text(),
                         'exchange_entry': self.exchange_entry.text(),
                         'routing_key': self.rk_entry.text(),
                         'message': self.message_entry.toPlainText(),
@@ -709,12 +727,83 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
             dialog_ui.save.clicked.connect(save)
             dialog.exec()
 
+    def delete_item_preset(self, item):
+        index = self.preset_tree.indexOfTopLevelItem(item)
+        to_remove = find_children(self.preset, item.text(0))
+
+        if to_remove:
+            reply = QMessageBox.question(
+                self,
+                "Confirm Deletion",
+                "Are you sure you want to delete this item?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
+        if index != -1:
+            self.preset_tree.takeTopLevelItem(index)
+        else:
+            parent = item.parent()
+            if parent:
+                parent.takeChild(parent.indexOfChild(item))
+
+        to_remove.add(item.text(0))
+
+        for item in to_remove:
+            self.preset.pop(item, None)
+        save_preset(self.preset)
+
+    def rename_preset(self, clicked_item):
+        dialog = QDialog(self)
+        dialog_ui = QM()
+        dialog_ui.setupUi(dialog)
+
+        dialog_ui.lineEdit.setText(clicked_item.text(0))
+        dialog_ui.lineEdit_2.setText(clicked_item.text(2))
+
+        old_name = clicked_item.text(0)
+        old_url = clicked_item.text(2)
+
+        def save():
+            new_name = dialog_ui.lineEdit.text()
+            new_url = dialog_ui.lineEdit_2.text()
+
+            if dialog_ui.lineEdit.text() == '':
+                dialog_ui.null_value.show()
+                dialog_ui.save.clearFocus()
+                return
+            if dialog_ui.null_value.isVisible():
+                dialog_ui.null_value.hide()
+            if search_tree(self.preset_tree, new_name) and old_url == new_url:
+                QMessageBox.warning(self, "Error", "A preset with this name already exists.")
+                dialog_ui.save.clearFocus()
+                return
+            if self.null_value.isVisible():
+                self.null_value.hide()
+
+            self.preset[new_name] = self.preset.pop(old_name)
+            self.preset[new_name]['url'] = new_url
+            for key in self.preset.keys():
+                if self.preset[key]['parent'] == old_name:
+                    self.preset[key]['parent'] = new_name
+
+            clicked_item.setText(0, new_name)
+            clicked_item.setText(2, new_url)
+            clicked_item.setData(2, Qt.UserRole, new_url)
+
+            save_preset(self.preset)
+            dialog.close()
+
+        dialog_ui.save.clicked.connect(save)
+        dialog.exec()
+
+
     def set_preset(self, item, column):
         if column == 0:
             if self.preset[item.text(0)].get("params"):
                 preset = self.preset[item.text(0)]['params']
-                if self.connections.get(item.text(0)):
-                    self.choose_host.setText(preset['host'])
                 self.exchange_entry.setText(preset['exchange_entry'])
                 self.rk_entry.setText(preset['routing_key'])
                 self.message_entry.setText(preset['message'])
@@ -726,6 +815,16 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
                 webbrowser.open(url)
 
     def checkbox_changed(self, state):
+        if not check_int(self.count.text()):
+            self.error_count.show()
+            self.count_yn.blockSignals(True)
+            self.count_yn.setCheckState(Qt.CheckState.Checked)
+            self.count_yn.blockSignals(False)
+            return
+        
+        if self.error_count.isVisible():
+            self.error_count.hide()
+        
         if state == 2:
             self.count.setReadOnly(False)
             # print("чекбокс установлен")
@@ -737,15 +836,15 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
         # Сбрасываем форматирование перед проверкой
         self.reset_formatting(entry)
         try:
-            json.loads(text)
+            json.loads(self.prepare_json(text))
             self.send.clearFocus()
             return True
-        except json.JSONDecodeError as e:
+        except json.decoder.JSONDecodeError as e:
             # Подсвечиваем ошибочную позицию
             line, column = e.lineno, e.colno
             absolute_position = self.get_absolute_position(text, line, column)
             self.highlight_error(absolute_position, entry)
-            QMessageBox.warning(self, 'Ошибка', f'Некорректный JSON: {e}')
+            self.json_valid.append(f'{entry.objectName()}: \n {e} \n\n')
             self.send.clearFocus()
             return False
 
@@ -773,37 +872,155 @@ class SenderApp(QMainWindow, design.Ui_MainWindow):
 
     def open_ui(self, item):
         if item.text(1) == '+':
-            print(self.connections[item.text(0)]["params"]["host"])
             webbrowser.open(f'http://{self.connections[item.text(0)]["params"]["host"]}:15672')
+    
+    def process_item(self,item):
+        values = {
+                "$UUID$": str(uuid.uuid4()),
+                "$STR$": generate_random_string(),
+                "$DATE$": str(date.today()),
+                "$DATE_TIME$": str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                "$ISO_UTC$": str(get_iso_datetime(utc=True)),
+                "$ISO$": str(get_iso_datetime())
+            }
+
+        # Замена значений в текущем объекте
+        for key, value in item.items():
+            if isinstance(value, dict):
+                self.process_item(value)
+            if isinstance(value, list):
+                value = [self.process_item(item) for item in value]
+            if isinstance(value, str):  # Проверяем, что значение — строка
+                for placeholder, replacement in values.items():
+                    value = value.replace(placeholder, replacement)
+                # Применяем регулярные выражения, если нужно
+                item[key] = value
+        return item
+
+    def prepare_json(self, json_string):
+
+        data = re.sub(r'\$INT-(\d+)\$', replace_match, json_string)
+        data = json.loads(re.sub(r'\$MSISDN\$', str(generate_random_int(msisdn=True)), data))
+
+        if isinstance(data, list):
+            data = [self.process_item(item) for item in data]
+        elif isinstance(data, dict):
+            data = self.process_item(data)
+        return json.dumps(data, indent=4)
+    
 
     def send_message(self):
-        message = self.message_entry.toPlainText()
+        self.json_valid.clear()
+        for item in [self.choose_host, self.exchange_entry, self.rk_entry, self.message_entry, self.headers_entry]:
+            try:
+                if check_null_value(item.text()):
+                    self.null_value.show()
+                    self.send.clearFocus()
+                    return
+            except AttributeError:
+                if check_null_value(item.toPlainText()):
+                    self.null_value.show()
+                    self.send.clearFocus()
+                    return
+        if self.null_value.isVisible():
+            self.null_value.hide()
 
-        message = message.replace('$UUID$', str(uuid.uuid4()))
-        message = message.replace('$STR$', str(generate_random_string()))
-        message = message.replace('$MSISDN$', str(generate_random_int(msisdn=True)))
-        message = message.replace('$DATE$', str(date.today()))
-        message = message.replace('$DATE_TIME$', str(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-
-        message = re.sub(pattern, replace_match, message)
-
-        print(message)
-
-        if not self.validate_json(message, self.message_entry):
+        if not check_int(self.count.text()):
+            self.error_count.show()
+            self.send.clearFocus()
             return
+        if self.error_count.isVisible():
+            self.error_count.hide()
 
-        json_message = json.loads(message)
+        self.progressBar.setMaximum(int(self.count.text()))
 
-        # for key, value in json_message.items():
-        #     for macro_name in macros:
-        #         if f"${macro_name}$" in value:
-        #             result = macros[macro_name].process_macro(value)
-        #             json_message[key] = value.replace(f"${macro_name}$", str(result))
+        conn_params = self.connections[self.choose_host.text()]['params']
+        
+        properties_valid = True
 
-        print(json_message)
+        if self.props_entry.toPlainText():
+            properties_valid = self.validate_json(self.props_entry.toPlainText(), self.props_entry)
+
+
+        message_valid = self.validate_json(self.message_entry.toPlainText(), self.message_entry)
+        headers_valid = self.validate_json(self.headers_entry.toPlainText(), self.headers_entry)
+        
+        if False in [message_valid,properties_valid,headers_valid]: 
+            warn_message = ''.join(str(x) for x in self.json_valid)
+            QMessageBox.warning(self, 'Ошибка', f'Некорректный JSON: \n\n {str(warn_message)}')
+            return
+        else:
+            self.json_valid.clear()
+        
+
+        if self.props_entry.toPlainText():
+            prop = json.loads(self.prepare_json(self.props_entry.toPlainText()))
+        else:
+            prop = dict()
+        heads = json.loads(self.prepare_json(self.headers_entry.toPlainText()))
+
+        try:
+            props = pika.BasicProperties(
+                content_type=prop.get('content_type'),
+                priority=prop.get('priority'),
+                reply_to=prop.get('replyTo'),
+                message_id=prop.get('messageId'),
+                type=prop.get('type'),
+                headers=heads
+            )
+
+            credentials = pika.PlainCredentials(
+                conn_params['username'],
+                conn_params['password']
+            )
+
+            connection = pika.BlockingConnection(pika.ConnectionParameters(
+                host = conn_params['host'],
+                port=int(conn_params['port']),
+                virtual_host=conn_params['vhost'],
+                credentials=credentials,
+                client_properties=create_client_props()
+            ))
+
+            channel = connection.channel()
+
+            for _ in range(int(self.count.text())):
+                channel.basic_publish(
+                    exchange=self.exchange_entry.text(),
+                    routing_key=self.rk_entry.text(),
+                    body=self.prepare_json(self.message_entry.toPlainText()),
+                    properties=props
+                )
+
+                value = self.progressBar.value()
+                if value < self.progressBar.maximum():
+                    self.progressBar.setValue(value + 1)
+                else:
+                    break
+            connection.close()
+            QMessageBox.information(self, "Success", f"Successfully send {self.count.text()} message.")
+            self.send.clearFocus()
+        
+        except Exception as e:
+            self.send.clearFocus()
+            self.show_traceback()
+
+    def show_traceback(self):
+        # Получение информации об ошибке
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+
+        # Отображение в QMessageBox
+        QMessageBox.critical(self, "Error", tb_text)
+
 
 def main():
+    if '_PYI_SPLASH_IPC' in os.environ and importlib.util.find_spec("pyi_splash"):
+        import pyi_splash
+        pyi_splash.update_text('UI Loaded ...')
+        pyi_splash.close()
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(os.path.join(basedir,'amqp_sender_icon.ico')))
     window = SenderApp()
     window.show()
     app.exec()
