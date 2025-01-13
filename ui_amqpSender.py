@@ -97,8 +97,8 @@ class Ui_MainWindow(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
         MainWindow.setSizePolicy(sizePolicy)
-        MainWindow.setMinimumSize(QSize(1050, 860))
-        MainWindow.setMaximumSize(QSize(1050, 860))
+        MainWindow.setMinimumSize(QSize(1050, 870))
+        MainWindow.setMaximumSize(QSize(1050, 870))
         MainWindow.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         MainWindow.setStyleSheet(u"#centralwidget {\n"
 "	background-color: rgb(255, 255, 255);\n"
